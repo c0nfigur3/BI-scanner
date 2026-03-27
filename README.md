@@ -1,5 +1,5 @@
 # BlueIris Scanner
-After encountering a BlueIris camera at work, I decided to poke around and see what information was publicly available just by reading through their documentation ([found here](https://blueirissoftware.com/BlueIris.PDF)). I eventually wrote this scanner in Python, which will run through all possible commands through the camera's JSON interface. If anonymous access is enabled (no login required), it will enumerate information such as camera names, CPU and memory stats, last software update, uptime, and more. 
+After encountering multiple environments with Blue Iris setups, I decided to write this Python scanner.
 
 ## Installation
 ```bash
