@@ -1,0 +1,11 @@
+admin
+carson
+password
+123456
+blueiris
+admin123
+password123
+letmein
+qwerty
+12345678
+blueiris123
