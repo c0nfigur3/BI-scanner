@@ -50,10 +50,10 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     args = parser.parse_args()
 
-    # ... (rest of the code stays exactly the same as your current version)
     base_url = args.host.rstrip("/")
     print(f"[*] Targeting Blue Iris @ {base_url}\n")
 
+    # Anonymous access check
     try:
         r = requests.post(f"{base_url}/json", json={"cmd": "login"}, timeout=10)
         data = r.json()
